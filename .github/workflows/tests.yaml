@@ -51,12 +51,14 @@ jobs:
 
       # Python
       - name: Generate SBOM - Python
-        if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != ''
+        if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
         run: |
           if [ -f requirements.txt ]; then
             syft requirements.txt -o cyclonedx-json > sbom.json
           elif [ -f poetry.lock ]; then
             syft poetry.lock -o cyclonedx-json > sbom.json
+          elif [ -f Pipfile.lock ]; then
+            syft Pipfile.lock -o cyclonedx-json > sbom.json
           fi
 
       # Flutter
