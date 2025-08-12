@@ -1,4 +1,4 @@
-name: SecurityPipeline
+name: SBOM Scan and Upload
 
 on:
   push:
@@ -8,39 +8,84 @@ on:
   workflow_dispatch:
 
 jobs:
-  secret-scan:
-    name: Gitleaks-proxy
+  sbom:
     runs-on: ubuntu-latest
+    env:
+      DT_URL: ${{ secrets.DEPENDENCY_TRACK_API_URL }}
+      DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
+      PROJECT_NAME: ${{ github.repository }}
+      PROJECT_VERSION: ${{ github.sha }}
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      # Step 2: Clone SecretScan repo with Dockerfile and rules.toml
-      # Old image: git clone --branch TESTING https://github.com/PoorneshORG/SecretScan.git secret-scan
-      - name: Clone SecretScan repo (Dockerfile + rules)
+      # Install fixed Syft version
+      - name: Install Syft
         run: |
-          git clone --branch dockerwithrules https://github.com/PoorneshORG/SecretScan.git secret-scan
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+          | sh -s -- -b /usr/local/bin v1.29.0
 
-      - name: Build Gitleaks Docker image with custom rules
+      # Java / Spring (Maven)
+      - name: Generate SBOM - Java Maven
+        if: hashFiles('pom.xml') != ''
         run: |
-          docker build -t gitleaks-custom -f secret-scan/Dockerfile secret-scan
-  
+          mvn -B clean install -DskipTests
+          syft target/*.jar -o cyclonedx-json > sbom.json
 
-      # - name: Build Gitleaks Docker image with custom rules
-      #   run: |
-      #     docker build -t gitleaks-custom -f ./Dockerfile .
-
-      - name: Run Gitleaks - custom rules
+      # Gradle / Kotlin
+      - name: Generate SBOM - Gradle
+        if: hashFiles('build.gradle*') != ''
         run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/app \
-            -w /app \
-            gitleaks-custom detect \
-              --source=/app \
-              --config=/app/secret-scan/rules.toml \
-              --no-git \
-              --verbose \
-              --exit-code 1 || true
+          ./gradlew build -x test
+          syft build/libs/*.jar -o cyclonedx-json > sbom.json
+
+      # Node.js / React
+      - name: Generate SBOM - Node.js (npm or yarn)
+        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
+        run: |
+          if [ -f package-lock.json ]; then
+            syft package-lock.json -o cyclonedx-json > sbom.json
+          elif [ -f yarn.lock ]; then
+            syft yarn.lock -o cyclonedx-json > sbom.json
+          fi
+
+      # Python
+      - name: Generate SBOM - Python
+        if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != ''
+        run: |
+          if [ -f requirements.txt ]; then
+            syft requirements.txt -o cyclonedx-json > sbom.json
+          elif [ -f poetry.lock ]; then
+            syft poetry.lock -o cyclonedx-json > sbom.json
+          fi
+
+      # Flutter
+      - name: Generate SBOM - Flutter
+        if: hashFiles('pubspec.lock') != ''
+        run: |
+          syft pubspec.lock -o cyclonedx-json > sbom.json
+
+      # Create project in Dependency-Track if missing
+      - name: Get or Create Project
+        id: project
+        run: |
+          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
+            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
+
+          if [ -z "$UUID" ]; then
+            echo "Creating new project..."
+            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
+              -H "X-Api-Key: $DT_API_KEY" \
+              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
+              "$DT_URL/api/v1/project" | jq -r '.uuid')
+          fi
+
+          echo "uuid=$UUID" >> $GITHUB_OUTPUT
+
+      # Upload SBOM
+      - name: Upload SBOM to Dependency-Track
+        run: |
+          curl -s -X POST "$DT_URL/api/v1/bom" \
+            -H "X-Api-Key: $DT_API_KEY" \
+            -F "project=${{ steps.project.outputs.uuid }}" \
+            -F "bom=@sbom.json"
