@@ -67,6 +67,12 @@ jobs:
         run: |
           syft pubspec.lock -o cyclonedx-json > sbom.json
 
+      #Debug SBOM.json
+      - name: Debug SBOM contents
+        run: |
+          echo "===== SBOM JSON Preview ====="
+          cat sbom.json | jq '.components[] | {name, version, purl}'
+
       # Create project in Dependency-Track if missing
       - name: Get or Create Project
         id: project
