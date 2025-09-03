@@ -1,8 +1,8 @@
 name: SBOM Scan and Upload
 
 on:
-  push:
-    branches: ['**']
+  # push:
+  #   branches: ['**']
   pull_request:
     branches: ['**']
   workflow_dispatch:
