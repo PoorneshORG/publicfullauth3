@@ -19,13 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install Syft
-      - name: Install Syft
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-          | sh -s -- -b /usr/local/bin v1.29.0
-
-      # Install CycloneDX CLI (for Gradle only)
+      # Install CycloneDX CLI
       - name: Install CycloneDX CLI
         run: |
           C_VERSION=0.29.1
@@ -39,9 +33,9 @@ jobs:
         if: hashFiles('pom.xml') != ''
         run: |
           mvn -B clean install -DskipTests
-          syft target/*.jar -o cyclonedx-json > sbom.json
+          cyclonedx sbom -o sbom.json --maven-target target/*.jar
 
-      # Gradle / Kotlin (use CycloneDX CLI instead of Syft)
+      # Gradle / Kotlin
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
@@ -55,9 +49,9 @@ jobs:
         if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
         run: |
           if [ -f package-lock.json ]; then
-            syft package-lock.json -o cyclonedx-json > sbom.json
+            cyclonedx npm --output-file sbom.json
           elif [ -f yarn.lock ]; then
-            syft yarn.lock -o cyclonedx-json > sbom.json
+            cyclonedx yarn --output-file sbom.json
           fi
 
       # Python
@@ -65,18 +59,18 @@ jobs:
         if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
         run: |
           if [ -f requirements.txt ]; then
-            syft requirements.txt -o cyclonedx-json > sbom.json
+            cyclonedx python -r requirements.txt --output-file sbom.json
           elif [ -f poetry.lock ]; then
-            syft poetry.lock -o cyclonedx-json > sbom.json
+            cyclonedx python -p poetry.lock --output-file sbom.json
           elif [ -f Pipfile.lock ]; then
-            syft Pipfile.lock -o cyclonedx-json > sbom.json
+            cyclonedx python -p Pipfile.lock --output-file sbom.json
           fi
 
       # Flutter
       - name: Generate SBOM - Flutter
         if: hashFiles('pubspec.lock') != ''
         run: |
-          syft pubspec.lock -o cyclonedx-json > sbom.json
+          cyclonedx flutter --output-file sbom.json
 
       # Debug SBOM.json
       - name: Debug SBOM contents
@@ -90,7 +84,6 @@ jobs:
         run: |
           UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
             "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
-
           if [ -z "$UUID" ]; then
             echo "Creating new project..."
             UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
@@ -98,7 +91,6 @@ jobs:
               -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
               "$DT_URL/api/v1/project" | jq -r '.uuid')
           fi
-
           echo "uuid=$UUID" >> $GITHUB_OUTPUT
 
       # Upload SBOM
