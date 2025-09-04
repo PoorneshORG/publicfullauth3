@@ -19,24 +19,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
           
-      # Gradle / Kotlin
+      # Gradle / Kotlin SBOM
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
           # Use gradlew if present, else system gradle
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
-            ./gradlew cyclonedxBom
+            ./gradlew cyclonedxDirectBom
           else
-            gradle cyclonedxBom
+            gradle cyclonedxDirectBom
           fi
 
-      #Debug SBOM.json
+      # Determine SBOM JSON file
+      - name: Set SBOM path
+        id: sbom
+        run: |
+          SBOM_FILE=$(find build/reports/cyclonedx-direct -name 'bom.json' | head -n 1)
+          if [ -z "$SBOM_FILE" ]; then
+            echo "No SBOM file found!"
+            exit 1
+          fi
+          echo "sbom_file=$SBOM_FILE" >> $GITHUB_OUTPUT
+
+      # Debug SBOM.json
       - name: Debug SBOM contents
         run: |
           echo "===== SBOM JSON Preview ====="
-          cat build/reports/cyclonedx/bom.json | jq '.components[] | {name, version, purl}'
-
+          cat ${{ steps.sbom.outputs.sbom_file }} | jq '.components[] | {name, version, purl}' | head -n 20
 
       # Create project in Dependency-Track if missing
       - name: Get or Create Project
@@ -44,21 +54,18 @@ jobs:
         run: |
           UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
             "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
-
           if [ -z "$UUID" ]; then
-            echo "Creating new project..."
             UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
               -H "X-Api-Key: $DT_API_KEY" \
               -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
               "$DT_URL/api/v1/project" | jq -r '.uuid')
           fi
-
           echo "uuid=$UUID" >> $GITHUB_OUTPUT
 
-      # Upload SBOM
+      # Upload SBOM to Dependency-Track
       - name: Upload SBOM to Dependency-Track
         run: |
           curl -s -X POST "$DT_URL/api/v1/bom" \
             -H "X-Api-Key: $DT_API_KEY" \
             -F "project=${{ steps.project.outputs.uuid }}" \
-            -F "bom=@build/reports/cyclonedx/bom.json"
+            -F "bom=@${{ steps.sbom.outputs.sbom_file }}"
