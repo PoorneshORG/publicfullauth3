@@ -23,16 +23,14 @@ tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
 }
 
-// Configure the CycloneDX SBOM task lazily
-gradle.taskGraph.whenReady { graph ->
-    tasks.withType(org.cyclonedx.gradle.CycloneDxTask).configureEach { task ->
-        task.includeConfigs.set(['implementation', 'runtimeClasspath'])
-        task.skipConfigs.set(['testImplementation', 'testRuntimeClasspath'])
-        task.projectType.set('library')
-        task.outputFormat.set('json')
-        task.outputLocation.set(file("$buildDir/sbom/gradle-sbom.json"))
-        task.includeMetadataResolution.set(true)
-        task.includeLicenseText.set(true)
-        task.includeBuildSystem.set(true)
-    }
+// Proper CycloneDX plugin configuration for Gradle 9+
+extensions.configure(org.cyclonedx.gradle.CycloneDxPluginExtension) { ext ->
+    ext.includeConfigs = ['implementation', 'runtimeClasspath']
+    ext.skipConfigs = ['testImplementation', 'testRuntimeClasspath']
+    ext.projectType = 'library'
+    ext.outputFormat = 'json'
+    ext.outputLocation = file("$buildDir/sbom/gradle-sbom.json")
+    ext.includeMetadataResolution = true
+    ext.includeLicenseText = true
+    ext.includeBuildSystem = true
 }
