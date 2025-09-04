@@ -66,10 +66,9 @@ jobs:
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
-          # Ensure gradlew is executable
-          chmod +x ./gradlew
-          # Generate SBOM using CycloneDX Gradle plugin
-          ./gradlew cyclonedxBom
+          # Use system Gradle if gradlew is not present
+          gradle cyclonedxBom
+
 
       #####################
       # Flutter
