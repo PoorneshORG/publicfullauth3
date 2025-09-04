@@ -1,4 +1,4 @@
-name: SBOM Scan with Vet
+name: Vet SBOM Scan and Upload
 
 on:
   push:
@@ -19,27 +19,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Run Vet to scan and generate SBOM
-      - name: Run Vet
+      # Run Vet Action (installs vet + uploads SARIF + summary)
+      - name: Run Vet (SARIF + summary)
         id: vet
         uses: safedep/vet-action@v1
         with:
-          # optionally point to a vet policy if you have one
-          # policy: '.github/vet/policy.yml'
           upload-sarif: true
           add-step-summary: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Rename Vet’s SBOM output to a predictable name
-      - name: Prepare SBOM
+      # Generate CycloneDX SBOM with Vet
+      - name: Generate SBOM with Vet
         run: |
-          if [ -f vet.cdx.json ]; then
-            mv vet.cdx.json sbom.json
-          else
-            echo "SBOM not found from Vet!"
-            exit 1
-          fi
+          echo "Running Vet to produce SBOM..."
+          $GITHUB_WORKSPACE/../*/vet scan \
+            --no-banner \
+            --report-cdx sbom.json \
+            --filter-suite $GITHUB_ACTION_PATH/dist/policy.yml
+          ls -lh sbom.json
 
       # Debug SBOM preview
       - name: Debug SBOM contents
@@ -47,7 +45,7 @@ jobs:
           echo "===== SBOM JSON Preview ====="
           cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
 
-      # Get or create project in Dependency-Track
+      # Create project in Dependency-Track if missing
       - name: Get or Create Project
         id: project
         run: |
