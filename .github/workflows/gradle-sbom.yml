@@ -18,19 +18,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      # Install fixed Syft version
-      - name: Install Syft
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-          | sh -s -- -b /usr/local/bin v1.29.0
           
       # Gradle / Kotlin
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
-          ./gradlew build -x test
-          syft build/libs/*.jar -o cyclonedx-json > sbom.json
+          # Use gradlew if present, else system gradle
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew cyclonedxBom
+          else
+            gradle cyclonedxBom
+          fi
 
       #Debug SBOM.json
       - name: Debug SBOM contents
