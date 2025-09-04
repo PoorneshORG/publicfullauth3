@@ -1,50 +1,110 @@
-name: Snyk SBOM + Dependency-Track
+name: SBOM Scan and Upload
 
 on:
-  push:
-    branches: ['**']
   pull_request:
     branches: ['**']
+  workflow_dispatch:
 
 jobs:
-  snyk-sbom-dtrack:
+  sbom:
     runs-on: ubuntu-latest
+    env:
+      DT_URL: ${{ secrets.DEPENDENCY_TRACK_API_URL }}
+      DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
+      PROJECT_NAME: ${{ github.repository }}
+      PROJECT_VERSION: ${{ github.sha }}
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Snyk CLI
-        run: npm install -g snyk
-
-      - name: Authenticate Snyk
-        run: snyk auth ${{ secrets.SNYK_TOKEN }}
-
-      - name: Generate SBOM with Snyk
+      # Install fixed Syft version
+      - name: Install Syft
         run: |
-          snyk sbom \
-            --format=cyclonedx1.5+json \
-            --all-projects \
-            --json-file-output=sbom.json
-          ls -lh sbom.json
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+          | sh -s -- -b /usr/local/bin v1.29.0
 
-      - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: snyk-sbom
-          path: sbom.json
+      # Java / Spring (Maven)
+      - name: Generate SBOM - Java Maven
+        if: hashFiles('pom.xml') != ''
+        run: |
+          mvn -B clean install -DskipTests
+          syft target/*.jar -o cyclonedx-json > sbom-maven.json
 
+      # Gradle / Kotlin
+      - name: Generate SBOM - Gradle
+        if: hashFiles('build.gradle*') != ''
+        run: |
+          ( [ -f ./gradlew ] && ./gradlew build -x test || gradle build -x test )
+          syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
+
+      # Node.js / React
+      - name: Generate SBOM - Node.js
+        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
+        run: |
+          if [ -f package-lock.json ]; then
+            syft package-lock.json -o cyclonedx-json > sbom-node.json
+          elif [ -f yarn.lock ]; then
+            syft yarn.lock -o cyclonedx-json > sbom-node.json
+          fi
+
+      # Python
+      - name: Generate SBOM - Python
+        if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
+        run: |
+          if [ -f requirements.txt ]; then
+            syft requirements.txt -o cyclonedx-json > sbom-python.json
+          elif [ -f poetry.lock ]; then
+            syft poetry.lock -o cyclonedx-json > sbom-python.json
+          elif [ -f Pipfile.lock ]; then
+            syft Pipfile.lock -o cyclonedx-json > sbom-python.json
+          fi
+
+      # Flutter
+      - name: Generate SBOM - Flutter
+        if: hashFiles('pubspec.lock') != ''
+        run: syft pubspec.lock -o cyclonedx-json > sbom-flutter.json
+
+      # Merge SBOMs
+      - name: Merge SBOMs
+        run: |
+          FILES=$(ls sbom-*.json 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "No SBOMs generated!"
+            exit 1
+          fi
+          if [ $(echo $FILES | wc -w) -eq 1 ]; then
+            cp $FILES sbom.json
+          else
+            jq -s '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components": (map(.components) | add)}' $FILES > sbom.json
+          fi
+
+      # Debug SBOM.json
+      - name: Debug SBOM contents
+        run: |
+          echo "===== SBOM JSON Preview ====="
+          cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
+
+      # Create project in Dependency-Track if missing
+      - name: Get or Create Project
+        id: project
+        run: |
+          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
+            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
+
+          if [ -z "$UUID" ]; then
+            echo "Creating new project..."
+            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
+              -H "X-Api-Key: $DT_API_KEY" \
+              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
+              "$DT_URL/api/v1/project" | jq -r '.uuid')
+          fi
+
+          echo "uuid=$UUID" >> $GITHUB_OUTPUT
+
+      # Upload SBOM
       - name: Upload SBOM to Dependency-Track
-        env:
-          DT_URL: ${{ secrets.DT_URL }}
-          DT_API_KEY: ${{ secrets.DT_API_KEY }}
-          PROJECT_NAME: PoorneshORG/publicfullauth3
-          PROJECT_VERSION: ${{ github.sha }}
         run: |
-          echo "Uploading SBOM to Dependency-Track..."
-          curl -s -X POST \
+          curl -s -X POST "$DT_URL/api/v1/bom" \
             -H "X-Api-Key: $DT_API_KEY" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            --data-binary @sbom.json \
-            "$DT_URL/api/v1/bom?projectName=$PROJECT_NAME&projectVersion=$PROJECT_VERSION"
+            -F "project=${{ steps.project.outputs.uuid }}" \
+            -F "bom=@sbom.json"
