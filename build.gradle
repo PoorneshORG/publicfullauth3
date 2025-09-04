@@ -11,12 +11,10 @@ repositories {
 }
 
 dependencies {
-    // Main dependencies
     implementation 'com.google.guava:guava:32.1.2-jre'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
     implementation 'ch.qos.logback:logback-classic:1.4.14'
 
-    // Test dependencies
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.assertj:assertj-core:3.25.3'
 }
@@ -25,26 +23,19 @@ tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
 }
 
-// CycloneDX SBOM configuration for Gradle 9+
+// Correct way: configure via extension
 cyclonedxBom {
-    // Generate JSON format SBOM
-    outputFormat = 'json'
-
-    // Save SBOM to project root (so workflow can find sbom.json)
-    outputLocation = file("${rootDir}/sbom.json")
-
-    // Include main implementation and runtime classpath
     includeConfigs = ['implementation', 'runtimeClasspath']
-
-    // Optional: skip test dependencies
     skipConfigs = ['testImplementation', 'testRuntimeClasspath']
-
-    // Optional: include build system metadata
+    projectType = 'library'
+    componentGroup = project.group
+    componentName = project.name
+    componentVersion = project.version.toString()
     includeBuildSystem = true
-
-    // Optional: include license text for components
     includeLicenseText = true
-
-    // Optional: include metadata about resolved dependencies
     includeMetadataResolution = true
+
+    // Output to root directory
+    outputFormat = 'json'
+    outputName = 'sbom' // this will generate sbom.json by default in build/reports/cyclonedx/
 }
