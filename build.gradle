@@ -1,6 +1,5 @@
 plugins {
     id 'java'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
     id 'org.cyclonedx.bom' version '1.9.0'
 }
 
@@ -24,11 +23,16 @@ tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
 }
 
-// Configure CycloneDX via the plugin extension using the new lazy API
-tasks.named('cyclonedxBom', org.cyclonedx.gradle.CycloneDxTask).configure { task ->
-    task.includeCompileClasspath.set(true)
-    task.includeRuntimeClasspath.set(true)
-    task.includeBuildScriptDependencies.set(false)
-    task.outputFormat.set('json')
-    task.outputLocation.set(file("$buildDir/sbom/gradle-sbom.json"))
+// Configure the CycloneDX SBOM task lazily
+gradle.taskGraph.whenReady { graph ->
+    tasks.withType(org.cyclonedx.gradle.CycloneDxTask).configureEach { task ->
+        task.includeConfigs.set(['implementation', 'runtimeClasspath'])
+        task.skipConfigs.set(['testImplementation', 'testRuntimeClasspath'])
+        task.projectType.set('library')
+        task.outputFormat.set('json')
+        task.outputLocation.set(file("$buildDir/sbom/gradle-sbom.json"))
+        task.includeMetadataResolution.set(true)
+        task.includeLicenseText.set(true)
+        task.includeBuildSystem.set(true)
+    }
 }
