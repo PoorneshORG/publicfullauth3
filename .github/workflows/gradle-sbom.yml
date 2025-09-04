@@ -2,11 +2,7 @@ name: Generate SBOM with cdxgen
 
 on:
   push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
 
 jobs:
   generate-sbom:
