@@ -23,24 +23,21 @@ tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
 }
 
-// CycloneDX SBOM configuration for Gradle 9+
-import org.cyclonedx.gradle.CycloneDxPluginExtension
-
-extensions.configure(CycloneDxPluginExtension) { ext ->
-    ext.includeConfigs = ['implementation', 'runtimeClasspath']
-    ext.skipConfigs = ['testImplementation', 'testRuntimeClasspath']
-    ext.projectType = 'library'
-    ext.componentGroup = project.group
-    ext.componentName = project.name
-    ext.componentVersion = project.version.toString()
-    ext.outputFormat = 'json'
-    ext.outputLocation = file("$buildDir/sbom/gradle-sbom.json")
-    ext.includeBuildSystem = true
-    ext.includeLicenseText = true
-    ext.includeMetadataResolution = true
-    ext.organizationalEntity = org.cyclonedx.model.OrganizationalEntity().with {
+// CycloneDX SBOM configuration (Gradle 9+ compatible)
+cyclonedxBom {
+    includeConfigs = ['implementation', 'runtimeClasspath']
+    skipConfigs = ['testImplementation', 'testRuntimeClasspath']
+    projectType = 'library'
+    componentGroup = project.group.toString()
+    componentName = project.name
+    componentVersion = project.version.toString()
+    outputFormat = 'json'
+    outputLocation = file("$buildDir/sbom/gradle-sbom.json")
+    includeBuildSystem = true
+    includeLicenseText = true
+    includeMetadataResolution = true
+    organizationalEntity {
         name = "PoorneshORG"
         urls = ["https://github.com/PoorneshORG"]
-        it
     }
 }
