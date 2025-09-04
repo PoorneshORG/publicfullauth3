@@ -1,8 +1,31 @@
-dependencies {
-    implementation 'com.google.guava:guava:30.1.1-jre'
-    implementation 'org.apache.commons:commons-lang3:3.9'
-    implementation 'ch.qos.logback:logback-classic:1.2.3'
+plugins {
+    id 'java'
+    id 'org.cyclonedx.bom' version '1.9.0'
+}
 
-    testImplementation 'junit:junit:4.12'
-    testImplementation 'org.assertj:assertj-core:3.16.1'
+group = "org.poornesh"
+version = "1.0.0"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.google.guava:guava:32.1.2-jre'
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
+
+// Correct Gradle 9+ configuration for CycloneDX 1.9.x
+tasks.named('cyclonedxBom') {
+    includeConfigs = ['implementation', 'runtimeClasspath']
+    skipConfigs = ['testImplementation', 'testRuntimeClasspath']
+    outputFormat = 'json'
 }
