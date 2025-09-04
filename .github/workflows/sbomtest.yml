@@ -1,94 +1,21 @@
-name: SBOM Scan and Upload
-
-on:
-  push:
-    branches: ['**']
-  pull_request:
-    branches: ['**']
-  workflow_dispatch:
+name: Generate SBOM
+on: [push, pull_request]
 
 jobs:
   sbom:
     runs-on: ubuntu-latest
-    env:
-      DT_URL: ${{ secrets.DEPENDENCY_TRACK_API_URL }}
-      DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
-      PROJECT_NAME: ${{ github.repository }}
-      PROJECT_VERSION: ${{ github.sha }}
-
     steps:
       - uses: actions/checkout@v4
 
-      # Install CycloneDX BOM via npm (no need for -g if using npx)
-      - name: Install CycloneDX BOM
-        run: npm install @cyclonedx/bom
+      - name: Generate SBOM
+        uses: safedep/vet-action@v1
+        with:
+          scan-dir: '.'
+          report-cdx: 'sbom.cdx.json'
+          app-name: ${{ github.repository }}
 
-      # Verify CycloneDX installation
-      - name: Verify CycloneDX BOM
-        run: |
-          echo "Checking version..."
-          npx @cyclonedx/bom --version
-
-      # Generate SBOMs for each ecosystem if detected
-      - name: Generate SBOM - Gradle
-        if: hashFiles('build.gradle*') != ''
-        run: npx @cyclonedx/bom gradle --output-file sbom-gradle.json
-
-      - name: Generate SBOM - Maven
-        if: hashFiles('pom.xml') != ''
-        run: npx @cyclonedx/bom maven --output-file sbom-maven.json
-
-      - name: Generate SBOM - Node.js
-        if: hashFiles('package.json') != ''
-        run: npx @cyclonedx/bom nodejs --output-file sbom-node.json
-
-      - name: Generate SBOM - Python
-        if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
-        run: npx @cyclonedx/bom python --output-file sbom-python.json
-
-      - name: Generate SBOM - Flutter
-        if: hashFiles('pubspec.lock') != ''
-        run: npx @cyclonedx/bom flutter --output-file sbom-flutter.json
-
-      # Merge all SBOMs into one file
-      - name: Merge SBOMs
-        run: |
-          FILES=$(ls sbom-*.json 2>/dev/null || true)
-          if [ -z "$FILES" ]; then
-            echo "No SBOMs were generated."
-            exit 1
-          fi
-          if [ $(echo $FILES | wc -w) -eq 1 ]; then
-            cp $FILES sbom.json
-          else
-            npx @cyclonedx/bom merge --input-files $FILES --output-file sbom.json
-          fi
-
-      # Debug SBOM
-      - name: Debug SBOM contents
-        run: |
-          echo "===== SBOM JSON Preview ====="
-          cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
-
-      # Create project in Dependency-Track if missing
-      - name: Get or Create Project
-        id: project
-        run: |
-          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
-            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
-          if [ -z "$UUID" ]; then
-            echo "Creating new project..."
-            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
-              -H "X-Api-Key: $DT_API_KEY" \
-              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
-              "$DT_URL/api/v1/project" | jq -r '.uuid')
-          fi
-          echo "uuid=$UUID" >> $GITHUB_OUTPUT
-
-      # Upload SBOM
-      - name: Upload SBOM to Dependency-Track
-        run: |
-          curl -s -X POST "$DT_URL/api/v1/bom" \
-            -H "X-Api-Key: $DT_API_KEY" \
-            -F "project=${{ steps.project.outputs.uuid }}" \
-            -F "bom=@sbom.json"
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
