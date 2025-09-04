@@ -22,7 +22,7 @@ jobs:
       # Install CycloneDX CLI via npm (official distribution)
       - name: Install CycloneDX CLI
         run: |
-          npm install -g @cyclonedx/cyclonedx-cli
+          npm install -g @cyclonedx/bom
 
       # Verify CycloneDX CLI installation
       - name: Verify CycloneDX CLI
