@@ -23,13 +23,11 @@ tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
 }
 
-// CycloneDX SBOM configuration compatible with 1.9.x
+// CycloneDX SBOM configuration compatible with plugin 1.9.x
 cyclonedxBom {
     includeConfigs = ['implementation', 'runtimeClasspath']
     skipConfigs = ['testImplementation', 'testRuntimeClasspath']
-    includeBuildSystem = true
-    includeLicenseText = true
-    includeMetadataResolution = true
     outputFormat = 'json'
     outputLocation = file("$buildDir/sbom/gradle-sbom.json")
+    includeLicenseText = true
 }
