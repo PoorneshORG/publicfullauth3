@@ -1,4 +1,4 @@
-name: SBOM Scan and Upload
+name: SBOM Scan with Vet
 
 on:
   push:
@@ -19,25 +19,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install Vet CLI
-      - name: Install Vet
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/safedep/vet/main/install.sh \
-            | sh -s -- -b /usr/local/bin
-          vet --version
+      # Run Vet to scan and generate SBOM
+      - name: Run Vet
+        id: vet
+        uses: safedep/vet-action@v1
+        with:
+          # optionally point to a vet policy if you have one
+          # policy: '.github/vet/policy.yml'
+          upload-sarif: true
+          add-step-summary: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generate SBOM with Vet
-      - name: Generate SBOM
+      # Rename Vet’s SBOM output to a predictable name
+      - name: Prepare SBOM
         run: |
-          vet scan . --format cyclonedx-json > sbom.json
+          if [ -f vet.cdx.json ]; then
+            mv vet.cdx.json sbom.json
+          else
+            echo "SBOM not found from Vet!"
+            exit 1
+          fi
 
-      # Debug SBOM
+      # Debug SBOM preview
       - name: Debug SBOM contents
         run: |
           echo "===== SBOM JSON Preview ====="
           cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
 
-      # Create project in Dependency-Track if missing
+      # Get or create project in Dependency-Track
       - name: Get or Create Project
         id: project
         run: |
@@ -52,7 +62,7 @@ jobs:
           fi
           echo "uuid=$UUID" >> $GITHUB_OUTPUT
 
-      # Upload SBOM
+      # Upload SBOM to Dependency-Track
       - name: Upload SBOM to Dependency-Track
         run: |
           curl -s -X POST "$DT_URL/api/v1/bom" \
