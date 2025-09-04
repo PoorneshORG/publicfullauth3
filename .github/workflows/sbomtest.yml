@@ -1,68 +1,49 @@
-name: Vet SBOM Scan and Upload
+name: Snyk SBOM + Dependency-Track
 
 on:
   push:
-    branches: ['**']
+    branches: [ main ]
   pull_request:
-    branches: ['**']
-  workflow_dispatch:
 
 jobs:
-  sbom:
+  snyk-sbom-dtrack:
     runs-on: ubuntu-latest
-    env:
-      DT_URL: ${{ secrets.DEPENDENCY_TRACK_API_URL }}
-      DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
-      PROJECT_NAME: ${{ github.repository }}
-      PROJECT_VERSION: ${{ github.sha }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      # Run Vet Action (installs vet + uploads SARIF + summary)
-      - name: Run Vet (SARIF + summary)
-        id: vet
-        uses: safedep/vet-action@v1
-        with:
-          upload-sarif: true
-          add-step-summary: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Snyk CLI
+        run: npm install -g snyk
 
-      # Generate CycloneDX SBOM with Vet
-      - name: Generate SBOM with Vet
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Generate SBOM with Snyk
         run: |
-          echo "Running Vet to produce SBOM..."
-          vet scan \
-            --no-banner \
-            --report-cdx sbom.json
+          snyk sbom \
+            --format=cyclonedx1.5+json \
+            --all-projects \
+            --json-file-output=sbom.json
           ls -lh sbom.json
 
-      # Debug SBOM preview
-      - name: Debug SBOM contents
-        run: |
-          echo "===== SBOM JSON Preview ====="
-          cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-sbom
+          path: sbom.json
 
-      # Create project in Dependency-Track if missing
-      - name: Get or Create Project
-        id: project
-        run: |
-          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
-            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
-          if [ -z "$UUID" ]; then
-            echo "Creating new project..."
-            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
-              -H "X-Api-Key: $DT_API_KEY" \
-              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
-              "$DT_URL/api/v1/project" | jq -r '.uuid')
-          fi
-          echo "uuid=$UUID" >> $GITHUB_OUTPUT
-
-      # Upload SBOM to Dependency-Track
       - name: Upload SBOM to Dependency-Track
+        env:
+          DT_URL: ${{ secrets.DT_URL }}
+          DT_API_KEY: ${{ secrets.DT_API_KEY }}
+          PROJECT_NAME: PoorneshORG/publicfullauth3
+          PROJECT_VERSION: ${{ github.sha }}
         run: |
-          curl -s -X POST "$DT_URL/api/v1/bom" \
+          echo "Uploading SBOM to Dependency-Track..."
+          curl -s -X POST \
             -H "X-Api-Key: $DT_API_KEY" \
-            -F "project=${{ steps.project.outputs.uuid }}" \
-            -F "bom=@sbom.json"
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            --data-binary @sbom.json \
+            "$DT_URL/api/v1/bom?projectName=$PROJECT_NAME&projectVersion=$PROJECT_VERSION"
