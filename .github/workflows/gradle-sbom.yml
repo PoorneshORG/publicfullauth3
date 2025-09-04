@@ -2,7 +2,9 @@ name: Generate SBOM
 
 on:
   push:
+
   pull_request:
+
 
 jobs:
   sbom:
@@ -16,52 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Java for Maven/Gradle detection
+      # Setup Java 21 for Maven/Gradle detection
       - name: Set up Java 21
         uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: 21
 
-      # Install cdxgen CLI
-      - name: Install cdxgen CLI
-        run: |
-          curl -sSL https://github.com/CycloneDX/cdxgen/releases/latest/download/cdxgen-cli-linux -o /usr/local/bin/cdxgen
-          chmod +x /usr/local/bin/cdxgen
-
-      # Generate SBOM for all languages
+      # Generate SBOM using CycloneDX Action
       - name: Generate SBOM
-        run: |
-          cdxgen -r -o sbom.json
-          cdxgen -p
+        uses: CycloneDX/cdxgen-action@v1
+        with:
+          projectName: ${{ env.PROJECT_NAME }}
+          projectVersion: ${{ env.PROJECT_VERSION }}
+          output: sbom.json
+          serverUrl: ${{ env.DT_URL }}
+          apiKey: ${{ env.DT_API_KEY }}
 
       # Debug SBOM
       - name: Debug SBOM contents
         run: |
           echo "===== SBOM JSON Preview ====="
           cat sbom.json | jq '.components[] | {name, version, purl}'
-
-      # Get or create project in Dependency-Track
-      - name: Get or Create Project
-        id: project
-        run: |
-          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
-            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
-
-          if [ -z "$UUID" ]; then
-            echo "Creating new project..."
-            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
-              -H "X-Api-Key: $DT_API_KEY" \
-              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
-              "$DT_URL/api/v1/project" | jq -r '.uuid')
-          fi
-
-          echo "uuid=$UUID" >> $GITHUB_OUTPUT
-
-      # Upload SBOM to Dependency-Track
-      - name: Upload SBOM to Dependency-Track
-        run: |
-          curl -s -X POST "$DT_URL/api/v1/bom" \
-            -H "X-Api-Key: $DT_API_KEY" \
-            -F "project=${{ steps.project.outputs.uuid }}" \
-            -F "bom=@sbom.json"
