@@ -23,10 +23,18 @@ jobs:
       - name: Install CycloneDX CLI
         run: |
           C_VERSION=0.29.1
-          curl -L -o cyclonedx-cli \
+          curl -sSL -o cyclonedx-cli \
             https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${C_VERSION}/cyclonedx-cli-linux-x64
           chmod +x cyclonedx-cli
           sudo mv cyclonedx-cli /usr/local/bin/
+
+      # Verify CycloneDX CLI installation
+      - name: Verify CycloneDX CLI
+        run: |
+          echo "Checking binary type..."
+          file /usr/local/bin/cyclonedx-cli
+          echo "Checking version..."
+          cyclonedx-cli --version
 
       # Generate SBOMs for each ecosystem if detected
       - name: Generate SBOM - Gradle
