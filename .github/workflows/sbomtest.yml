@@ -2,8 +2,9 @@ name: Snyk SBOM + Dependency-Track
 
 on:
   push:
-    branches: [ main ]
+    branches: ['**']
   pull_request:
+    branches: ['**']
 
 jobs:
   snyk-sbom-dtrack:
