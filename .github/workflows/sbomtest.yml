@@ -83,10 +83,17 @@ jobs:
       - name: Merge SBOMs
         run: |
           FILES=$(ls sbom-*.json 2>/dev/null || true)
+      
+          # Include Gradle SBOM if it exists
+          if [ -f build/reports/cyclonedx/bom.json ]; then
+            FILES="$FILES build/reports/cyclonedx/bom.json"
+          fi
+      
           if [ -z "$FILES" ]; then
             echo "No SBOMs generated!"
             exit 1
           fi
+      
           if [ $(echo $FILES | wc -w) -eq 1 ]; then
             cp $FILES sbom.json
           else
@@ -99,6 +106,7 @@ jobs:
               }
             ' $FILES > sbom.json
           fi
+
 
       #####################
       # Debug SBOM
