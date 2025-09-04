@@ -17,13 +17,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # Generate SBOM using CycloneDX Docker image (all languages)
-      - name: Generate SBOM using Docker
+      - name: Generate SBOM using Docker Java21 image
         run: |
-          echo "Generating SBOM using CycloneDX Docker image..."
+          sudo chown -R $(id -u):$(id -g) .
           docker run --rm \
-            -v /tmp:/tmp \
-            -v $PWD:/app:rw \
-            -t ghcr.io/cyclonedx/cdxgen \
+            -v $PWD:/app \
+            -t ghcr.io/cyclonedx/cdxgen-java21:v11 \
             -r /app \
             -o /app/sbom.json
           echo "===== SBOM JSON Preview ====="
