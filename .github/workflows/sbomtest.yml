@@ -32,12 +32,16 @@ jobs:
           mvn -B clean install -DskipTests
           syft target/*.jar -o cyclonedx-json > sbom-maven.json
 
-      # Gradle / Kotlin
+      # Gradle / Kotlin (with Shadow JAR for deps)
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
-          ( [ -f ./gradlew ] && ./gradlew build -x test || gradle build -x test )
-          syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
+          ( [ -f ./gradlew ] && ./gradlew shadowJar -x test || gradle shadowJar -x test )
+          if ls build/libs/*-all.jar 1> /dev/null 2>&1; then
+            syft build/libs/*-all.jar -o cyclonedx-json > sbom-gradle.json
+          else
+            syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
+          fi
 
       # Node.js / React
       - name: Generate SBOM - Node.js
@@ -77,7 +81,14 @@ jobs:
           if [ $(echo $FILES | wc -w) -eq 1 ]; then
             cp $FILES sbom.json
           else
-            jq -s '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components": (map(.components) | add)}' $FILES > sbom.json
+            jq -s '
+              {
+                bomFormat: "CycloneDX",
+                specVersion: "1.4",
+                version: 1,
+                components: (map(.components) | add)
+              }
+            ' $FILES > sbom.json
           fi
 
       # Debug SBOM.json
@@ -85,6 +96,13 @@ jobs:
         run: |
           echo "===== SBOM JSON Preview ====="
           cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
+
+      # Upload SBOM artifact (backup)
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.json
 
       # Create project in Dependency-Track if missing
       - name: Get or Create Project
@@ -103,7 +121,7 @@ jobs:
 
           echo "uuid=$UUID" >> $GITHUB_OUTPUT
 
-      # Upload SBOM
+      # Upload SBOM to Dependency-Track
       - name: Upload SBOM to Dependency-Track
         run: |
           curl -s -X POST "$DT_URL/api/v1/bom" \
