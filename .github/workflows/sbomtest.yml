@@ -68,13 +68,22 @@ jobs:
         if: hashFiles('build.gradle*') != ''
         run: |
           # Generate a lockfile to resolve all dependencies
-          ( [ -f ./gradlew ] && ./gradlew dependencies --write-locks || gradle dependencies --write-locks )
-          # Scan the lockfile for proper versions
+          if [ -f ./gradlew ]; then
+            ./gradlew dependencies --write-locks
+          else
+            gradle dependencies --write-locks
+          fi
+
+          # Scan the lockfile if it exists
           if [ -f gradle.lockfile ]; then
             syft gradle.lockfile -o cyclonedx-json > sbom-gradle.json
           else
             # fallback: scan built jars
-            ( [ -f ./gradlew ] && ./gradlew build -x test || gradle build -x test )
+            if [ -f ./gradlew ]; then
+              ./gradlew build -x test
+            else
+              gradle build -x test
+            fi
             syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
           fi
 
@@ -106,6 +115,7 @@ jobs:
                 components: (map(.components) | add)
               }
             ' $FILES > sbom.json
+          fi
 
       # Debug SBOM.json
       - name: Debug SBOM contents
