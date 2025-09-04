@@ -1,8 +1,8 @@
 name: SBOM Scan and Upload
 
 on:
-  # push:
-  #   branches: ['**']
+  push:
+    branches: ['**']
   pull_request:
     branches: ['**']
   workflow_dispatch:
@@ -24,48 +24,13 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
           | sh -s -- -b /usr/local/bin v1.29.0
-
-      # Java / Spring (Maven)
-      - name: Generate SBOM - Java Maven
-        if: hashFiles('pom.xml') != ''
-        run: |
-          mvn -B clean install -DskipTests
-          syft target/*.jar -o cyclonedx-json > sbom.json
-
+          
       # Gradle / Kotlin
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
           ./gradlew build -x test
           syft build/libs/*.jar -o cyclonedx-json > sbom.json
-
-      # Node.js / React
-      - name: Generate SBOM - Node.js (npm or yarn)
-        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
-        run: |
-          if [ -f package-lock.json ]; then
-            syft package-lock.json -o cyclonedx-json > sbom.json
-          elif [ -f yarn.lock ]; then
-            syft yarn.lock -o cyclonedx-json > sbom.json
-          fi
-
-      # Python
-      - name: Generate SBOM - Python
-        if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
-        run: |
-          if [ -f requirements.txt ]; then
-            syft requirements.txt -o cyclonedx-json > sbom.json
-          elif [ -f poetry.lock ]; then
-            syft poetry.lock -o cyclonedx-json > sbom.json
-          elif [ -f Pipfile.lock ]; then
-            syft Pipfile.lock -o cyclonedx-json > sbom.json
-          fi
-
-      # Flutter
-      - name: Generate SBOM - Flutter
-        if: hashFiles('pubspec.lock') != ''
-        run: |
-          syft pubspec.lock -o cyclonedx-json > sbom.json
 
       #Debug SBOM.json
       - name: Debug SBOM contents
