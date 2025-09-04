@@ -4,7 +4,6 @@ on:
   push:
   pull_request:
 
-
 jobs:
   sbom:
     runs-on: ubuntu-latest
@@ -17,33 +16,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Java 21 for Maven/Gradle detection
-      - name: Set up Java 21
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 21
-
-      # Java / Gradle / Maven SBOM using cdxgen CLI
-      - name: Generate SBOM for Java projects
-        if: hashFiles('build.gradle*') != '' || hashFiles('pom.xml') != ''
+      # Generate SBOM using CycloneDX Docker image (all languages)
+      - name: Generate SBOM using Docker
         run: |
-          echo "Generating SBOM using cdxgen CLI for Java project..."
-          curl -sSL -o cdxgen-cli.jar https://github.com/CycloneDX/cdxgen/releases/download/v11.7.0/cdxgen-cli-11.7.0.jar
-          java -jar cdxgen-cli.jar -r -o sbom.json
+          echo "Generating SBOM using CycloneDX Docker image..."
+          docker run --rm \
+            -v /tmp:/tmp \
+            -v $PWD:/app:rw \
+            -t ghcr.io/cyclonedx/cdxgen \
+            -r /app \
+            -o /app/sbom.json
           echo "===== SBOM JSON Preview ====="
-          java -jar cdxgen-cli.jar -p
-
-      # Node.js / Python SBOM using CycloneDX Action
-      - name: Generate SBOM for Java projects
-        if: hashFiles('build.gradle*') != '' || hashFiles('pom.xml') != ''
-        run: |
-          echo "Generating SBOM using cdxgen CLI for Java project..."
-          curl -sSL -o cdxgen-cli.jar https://github.com/CycloneDX/cdxgen/releases/download/v11.4.1/cdxgen-cli-11.4.1.jar
-          java -jar cdxgen-cli.jar -r -o sbom.json
-          echo "===== SBOM JSON Preview ====="
-          java -jar cdxgen-cli.jar -p
-
+          docker run --rm \
+            -v /tmp:/tmp \
+            -v $PWD:/app:rw \
+            -t ghcr.io/cyclonedx/cdxgen \
+            -p /app/sbom.json
 
       # Upload SBOM artifact for download
       - name: Upload SBOM artifact
