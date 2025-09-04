@@ -1,23 +1,24 @@
 plugins {
     id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
-group = "org.poornesh"       // your org or domain (reverse-DNS style is common)
-version = "1.0.0"            // meaningful version, not UNKNOWN
+group = "org.poornesh"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // Add a popular runtime dependency
     implementation 'com.google.guava:guava:32.1.2-jre'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
-
-    // Add some logging (common in real apps)
     implementation 'ch.qos.logback:logback-classic:1.4.14'
 
-    // Test dependencies
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.assertj:assertj-core:3.25.3'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
 }
