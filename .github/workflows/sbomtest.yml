@@ -66,18 +66,16 @@ jobs:
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
-          # 1. Generate a lockfile to capture all resolved dependencies
+          # Generate lockfile to resolve all dependencies
           ( [ -f ./gradlew ] && ./gradlew dependencies --write-locks || gradle dependencies --write-locks )
 
-          # 2. Scan lockfile if present
+          # Scan the lockfile if it exists
           if [ -f gradle.lockfile ]; then
             syft gradle.lockfile -o cyclonedx-json > sbom-gradle.json
           else
-            # 3. Fallback: copy dependencies to a folder and scan
-            ( [ -f ./gradlew ] && ./gradlew build -x test copyDeps || gradle build -x test copyDeps )
-            mkdir -p deps
-            cp build/libs/*.jar deps/ 2>/dev/null || true
-            syft deps/*.jar -o cyclonedx-json > sbom-gradle.json
+            # fallback: scan built jars in build/libs
+            ( [ -f ./gradlew ] && ./gradlew build -x test || gradle build -x test )
+            syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
           fi
 
       #####################
@@ -110,13 +108,17 @@ jobs:
             ' $FILES > sbom.json
           fi
 
-      # Debug SBOM.json
+      #####################
+      # Debug SBOM
+      #####################
       - name: Debug SBOM contents
         run: |
           echo "===== SBOM JSON Preview ====="
           cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
 
+      #####################
       # Upload SBOM artifact (backup)
+      #####################
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
