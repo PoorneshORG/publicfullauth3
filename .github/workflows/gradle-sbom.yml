@@ -1,8 +1,7 @@
-name: Generate SBOM
+name: Generate and Upload SBOM
 
 on:
   push:
-
   pull_request:
 
 
@@ -25,18 +24,54 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # Generate SBOM using CycloneDX Action
-      - name: Generate SBOM
+      # Java / Gradle / Maven SBOM using cdxgen CLI
+      - name: Generate SBOM for Java projects
+        if: hashFiles('build.gradle*') != '' || hashFiles('pom.xml') != ''
+        run: |
+          echo "Generating SBOM using cdxgen CLI for Java project..."
+          curl -sSL https://github.com/CycloneDX/cdxgen/releases/latest/download/cdxgen-cli-linux -o /usr/local/bin/cdxgen
+          chmod +x /usr/local/bin/cdxgen
+          cdxgen -r -o sbom.json
+          echo "===== SBOM JSON Preview ====="
+          cdxgen -p
+
+      # Node.js / Python SBOM using CycloneDX Action
+      - name: Generate SBOM for Node.js / Python
+        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != '' || hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
         uses: CycloneDX/cdxgen-action@v1
         with:
           projectName: ${{ env.PROJECT_NAME }}
           projectVersion: ${{ env.PROJECT_VERSION }}
           output: sbom.json
-          serverUrl: ${{ env.DT_URL }}
-          apiKey: ${{ env.DT_API_KEY }}
 
-      # Debug SBOM
-      - name: Debug SBOM contents
+      # Upload SBOM artifact for download
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom
+          path: sbom.json
+
+      # Get or create project in Dependency-Track
+      - name: Get or Create Project
+        id: project
         run: |
-          echo "===== SBOM JSON Preview ====="
-          cat sbom.json | jq '.components[] | {name, version, purl}'
+          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
+            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
+
+          if [ -z "$UUID" ]; then
+            echo "Creating new project..."
+            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
+              -H "X-Api-Key: $DT_API_KEY" \
+              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
+              "$DT_URL/api/v1/project" | jq -r '.uuid')
+          fi
+
+          echo "uuid=$UUID" >> $GITHUB_OUTPUT
+
+      # Upload SBOM to Dependency-Track
+      - name: Upload SBOM to Dependency-Track
+        run: |
+          curl -s -X POST "$DT_URL/api/v1/bom" \
+            -H "X-Api-Key: $DT_API_KEY" \
+            -F "project=${{ steps.project.outputs.uuid }}" \
+            -F "bom=@sbom.json"
