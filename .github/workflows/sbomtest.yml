@@ -19,16 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install CycloneDX CLI via npm (official distribution)
+      # Install CycloneDX CLI via npm
       - name: Install CycloneDX CLI
         run: |
           npm install -g @cyclonedx/bom
-
-      # Verify CycloneDX CLI installation
+      
+      # Verify CycloneDX installation
       - name: Verify CycloneDX CLI
         run: |
           echo "Checking version..."
-          cyclonedx-cli --version
+          cyclonedx-bom --version
+
 
       # Generate SBOMs for each ecosystem if detected
       - name: Generate SBOM - Gradle
