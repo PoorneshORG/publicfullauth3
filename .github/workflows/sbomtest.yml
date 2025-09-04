@@ -1,21 +1,61 @@
-name: Generate SBOM
-on: [push, pull_request]
+name: SBOM Scan and Upload
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  workflow_dispatch:
 
 jobs:
   sbom:
     runs-on: ubuntu-latest
+    env:
+      DT_URL: ${{ secrets.DEPENDENCY_TRACK_API_URL }}
+      DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
+      PROJECT_NAME: ${{ github.repository }}
+      PROJECT_VERSION: ${{ github.sha }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate SBOM
-        uses: safedep/vet-action@v1
-        with:
-          scan-dir: '.'
-          report-cdx: 'sbom.cdx.json'
-          app-name: ${{ github.repository }}
+      # Install Vet CLI
+      - name: Install Vet
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/safedep/vet/main/install.sh \
+            | sh -s -- -b /usr/local/bin
+          vet --version
 
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom
-          path: sbom.cdx.json
+      # Generate SBOM with Vet
+      - name: Generate SBOM
+        run: |
+          vet scan . --format cyclonedx-json > sbom.json
+
+      # Debug SBOM
+      - name: Debug SBOM contents
+        run: |
+          echo "===== SBOM JSON Preview ====="
+          cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
+
+      # Create project in Dependency-Track if missing
+      - name: Get or Create Project
+        id: project
+        run: |
+          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
+            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
+          if [ -z "$UUID" ]; then
+            echo "Creating new project..."
+            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
+              -H "X-Api-Key: $DT_API_KEY" \
+              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
+              "$DT_URL/api/v1/project" | jq -r '.uuid')
+          fi
+          echo "uuid=$UUID" >> $GITHUB_OUTPUT
+
+      # Upload SBOM
+      - name: Upload SBOM to Dependency-Track
+        run: |
+          curl -s -X POST "$DT_URL/api/v1/bom" \
+            -H "X-Api-Key: $DT_API_KEY" \
+            -F "project=${{ steps.project.outputs.uuid }}" \
+            -F "bom=@sbom.json"
