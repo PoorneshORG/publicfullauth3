@@ -35,13 +35,15 @@ jobs:
           java -jar cdxgen-cli.jar -p
 
       # Node.js / Python SBOM using CycloneDX Action
-      - name: Generate SBOM for Node.js / Python
-        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != '' || hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
-        uses: CycloneDX/cdxgen-action@v1
-        with:
-          projectName: ${{ env.PROJECT_NAME }}
-          projectVersion: ${{ env.PROJECT_VERSION }}
-          output: sbom.json
+      - name: Generate SBOM for Java projects
+        if: hashFiles('build.gradle*') != '' || hashFiles('pom.xml') != ''
+        run: |
+          echo "Generating SBOM using cdxgen CLI for Java project..."
+          curl -sSL -o cdxgen-cli.jar https://github.com/CycloneDX/cdxgen/releases/download/v11.4.1/cdxgen-cli-11.4.1.jar
+          java -jar cdxgen-cli.jar -r -o sbom.json
+          echo "===== SBOM JSON Preview ====="
+          java -jar cdxgen-cli.jar -p
+
 
       # Upload SBOM artifact for download
       - name: Upload SBOM artifact
