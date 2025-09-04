@@ -9,21 +9,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Java
+      - name: Set up Java 21
         uses: actions/setup-java@v3
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
-      - name: Install cdxgen
+      - name: Install cdxgen CLI
         run: |
-          curl -sL https://github.com/CycloneDX/cdxgen/releases/latest/download/cdxgen-cli.jar -o /usr/local/bin/cdxgen
-          chmod +x /usr/local/bin/cdxgen
+          curl -sSL https://github.com/CycloneDX/cdxgen/releases/latest/download/cdxgen-cli.jar -o cdxgen-cli.jar
 
       - name: Generate SBOM
         run: |
-          cdxgen -r -o bom.json
-          cdxgen -p
+          java -jar cdxgen-cli.jar -t java -o bom.json
+          java -jar cdxgen-cli.jar -p
