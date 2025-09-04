@@ -35,7 +35,8 @@ jobs:
       - name: Debug SBOM contents
         run: |
           echo "===== SBOM JSON Preview ====="
-          cat sbom.json | jq '.components[] | {name, version, purl}'
+          cat build/reports/cyclonedx/bom.json | jq '.components[] | {name, version, purl}'
+
 
       # Create project in Dependency-Track if missing
       - name: Get or Create Project
@@ -60,4 +61,4 @@ jobs:
           curl -s -X POST "$DT_URL/api/v1/bom" \
             -H "X-Api-Key: $DT_API_KEY" \
             -F "project=${{ steps.project.outputs.uuid }}" \
-            -F "bom=@sbom.json"
+            -F "bom=@build/reports/cyclonedx/bom.json"

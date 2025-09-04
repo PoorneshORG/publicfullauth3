@@ -24,8 +24,8 @@ tasks.withType(JavaCompile) {
 }
 
 // Correct Gradle 9+ configuration for CycloneDX 1.9.x
-tasks.named('cyclonedxBom') {
-    includeConfigs = ['implementation', 'runtimeClasspath']
-    skipConfigs = ['testImplementation', 'testRuntimeClasspath']
+cyclonedxBom {
     outputFormat = 'json'
+    outputLocation = file("${rootDir}/sbom.json")  // <- write SBOM to root
+    includeConfigs = ['implementation', 'runtimeClasspath']
 }
