@@ -28,20 +28,12 @@ jobs:
       # Java / Spring (Maven)
       - name: Generate SBOM - Java Maven
         if: hashFiles('pom.xml') != ''
-        run: |
-          mvn -B clean install -DskipTests
-          syft target/*.jar -o cyclonedx-json > sbom-maven.json
+        run: syft pom.xml -o cyclonedx-json > sbom-maven.json
 
-      # Gradle / Kotlin (with Shadow JAR for deps)
+      # Gradle / Kotlin
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
-        run: |
-          ( [ -f ./gradlew ] && ./gradlew shadowJar -x test || gradle shadowJar -x test )
-          if ls build/libs/*-all.jar 1> /dev/null 2>&1; then
-            syft build/libs/*-all.jar -o cyclonedx-json > sbom-gradle.json
-          else
-            syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
-          fi
+        run: syft build.gradle* -o cyclonedx-json > sbom-gradle.json
 
       # Node.js / React
       - name: Generate SBOM - Node.js
