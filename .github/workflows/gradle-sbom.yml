@@ -1,71 +1,31 @@
-name: SBOM Scan and Upload
+name: Generate SBOM with cdxgen
 
 on:
   push:
-    branches: ['**']
+    branches:
+      - main
   pull_request:
-    branches: ['**']
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
-  sbom:
+  generate-sbom:
     runs-on: ubuntu-latest
-    env:
-      DT_URL: ${{ secrets.DEPENDENCY_TRACK_API_URL }}
-      DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
-      PROJECT_NAME: ${{ github.repository }}
-      PROJECT_VERSION: ${{ github.sha }}
 
     steps:
-      - uses: actions/checkout@v4
-          
-      # Gradle / Kotlin SBOM
-      - name: Generate SBOM - Gradle
-        if: hashFiles('build.gradle*') != ''
-        run: |
-          # Use gradlew if present, else system gradle
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            ./gradlew cyclonedxDirectBom
-          else
-            gradle cyclonedxDirectBom
-          fi
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      # Determine SBOM JSON file
-      - name: Set SBOM path
-        id: sbom
-        run: |
-          SBOM_FILE=$(find build/reports/cyclonedx-direct -name 'bom.json' | head -n 1)
-          if [ -z "$SBOM_FILE" ]; then
-            echo "No SBOM file found!"
-            exit 1
-          fi
-          echo "sbom_file=$SBOM_FILE" >> $GITHUB_OUTPUT
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
 
-      # Debug SBOM.json
-      - name: Debug SBOM contents
+      - name: Install cdxgen
         run: |
-          echo "===== SBOM JSON Preview ====="
-          cat ${{ steps.sbom.outputs.sbom_file }} | jq '.components[] | {name, version, purl}' | head -n 20
+          curl -sSL https://github.com/CycloneDX/cdxgen/releases/latest/download/cdxgen-standalone.jar -o cdxgen.jar
 
-      # Create project in Dependency-Track if missing
-      - name: Get or Create Project
-        id: project
+      - name: Generate SBOM
         run: |
-          UUID=$(curl -s -H "X-Api-Key: $DT_API_KEY" \
-            "$DT_URL/api/v1/project?name=$PROJECT_NAME" | jq -r '.[0].uuid // empty')
-          if [ -z "$UUID" ]; then
-            UUID=$(curl -s -X PUT -H "Content-Type: application/json" \
-              -H "X-Api-Key: $DT_API_KEY" \
-              -d '{"name":"'"$PROJECT_NAME"'","version":"'"$PROJECT_VERSION"'"}' \
-              "$DT_URL/api/v1/project" | jq -r '.uuid')
-          fi
-          echo "uuid=$UUID" >> $GITHUB_OUTPUT
-
-      # Upload SBOM to Dependency-Track
-      - name: Upload SBOM to Dependency-Track
-        run: |
-          curl -s -X POST "$DT_URL/api/v1/bom" \
-            -H "X-Api-Key: $DT_API_KEY" \
-            -F "project=${{ steps.project.outputs.uuid }}" \
-            -F "bom=@${{ steps.sbom.outputs.sbom_file }}"
+          java -jar cdxgen.jar -r -o sbom.json
+          cat sbom.json
