@@ -22,11 +22,3 @@ dependencies {
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
-
-// CycloneDX configuration
-cyclonedxBom {
-    projectType = 'library'               // Your project type
-    includeConfigs = ['implementation']   // Include runtime dependencies
-    skipConfigs = ['testImplementation']  // Exclude test dependencies
-    outputFormat = 'json'                 // JSON SBOM
-}
