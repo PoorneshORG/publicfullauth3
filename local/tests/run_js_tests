@@ -1,4 +1,0 @@
-#!/bin/bash -ex
-
-echo 'Running js tests...'
-python butler.py js_unittest

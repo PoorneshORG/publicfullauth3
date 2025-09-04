@@ -1,7 +1,0 @@
-brew "golang"
-brew "node"
-brew "nodeenv"
-brew "pipenv"
-brew "pkill"
-brew "python3"
-brew "xz"
