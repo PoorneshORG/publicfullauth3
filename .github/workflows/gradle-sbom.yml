@@ -29,11 +29,11 @@ jobs:
         if: hashFiles('build.gradle*') != '' || hashFiles('pom.xml') != ''
         run: |
           echo "Generating SBOM using cdxgen CLI for Java project..."
-          curl -sSL https://github.com/CycloneDX/cdxgen/releases/latest/download/cdxgen-cli-linux -o /usr/local/bin/cdxgen
-          chmod +x /usr/local/bin/cdxgen
-          cdxgen -r -o sbom.json
+          curl -sSL https://github.com/CycloneDX/cdxgen/releases/download/v3.4.1/cdxgen-cli-3.4.1.jar -o cdxgen-cli.jar
+          java -jar cdxgen-cli.jar -r -o sbom.json
           echo "===== SBOM JSON Preview ====="
-          cdxgen -p
+          java -jar cdxgen-cli.jar -p
+
 
       # Node.js / Python SBOM using CycloneDX Action
       - name: Generate SBOM for Node.js / Python
