@@ -1,6 +1,5 @@
 plugins {
     id 'java'
-    id 'org.cyclonedx.bom' version '1.9.0'
 }
 
 group = 'org.poornesh'
@@ -11,7 +10,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.google.guava:guava:32.1.2-jre'
+    implementation 'com.google.guava:32.1.2-jre'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
     implementation 'ch.qos.logback:logback-classic:1.4.14'
 
@@ -21,4 +20,8 @@ dependencies {
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnit()
 }
