@@ -66,9 +66,13 @@ jobs:
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
         run: |
-          # Use system Gradle if gradlew is not present
-          gradle cyclonedxBom
-
+          # Use gradlew if present, else system gradle
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew cyclonedxBom
+          else
+            gradle cyclonedxBom
+          fi
 
       #####################
       # Flutter
@@ -83,17 +87,17 @@ jobs:
       - name: Merge SBOMs
         run: |
           FILES=$(ls sbom-*.json 2>/dev/null || true)
-      
+
           # Include Gradle SBOM if it exists
           if [ -f build/reports/cyclonedx/bom.json ]; then
             FILES="$FILES build/reports/cyclonedx/bom.json"
           fi
-      
+
           if [ -z "$FILES" ]; then
             echo "No SBOMs generated!"
             exit 1
           fi
-      
+
           if [ $(echo $FILES | wc -w) -eq 1 ]; then
             cp $FILES sbom.json
           else
@@ -106,7 +110,6 @@ jobs:
               }
             ' $FILES > sbom.json
           fi
-
 
       #####################
       # Debug SBOM
