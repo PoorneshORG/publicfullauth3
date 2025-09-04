@@ -25,10 +25,11 @@ tasks.withType(JavaCompile) {
 }
 
 // Correct CycloneDX SBOM task configuration
-tasks.register('cyclonedxBom', org.cyclonedx.gradle.CycloneDxTask) {
+cyclonedxBom {
     includeCompileClasspath.set(true)
     includeRuntimeClasspath.set(true)
     includeBuildScripts.set(false)
     outputFormat.set('json')
     outputLocation.set("$buildDir/sbom/gradle-sbom.json")
 }
+
