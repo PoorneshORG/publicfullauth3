@@ -24,12 +24,12 @@ tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
 }
 
-// Correct CycloneDX SBOM task configuration
-cyclonedxBom {
-    includeCompileClasspath.set(true)
-    includeRuntimeClasspath.set(true)
-    includeBuildScripts.set(false)
-    outputFormat.set('json')
-    outputLocation.set("$buildDir/sbom/gradle-sbom.json")
+// Configure the CycloneDX plugin via the extension, NOT the task
+cyclonedx {
+    includeCompileClasspath = true       // include compile dependencies
+    includeRuntimeClasspath = true       // include runtime dependencies
+    includeBuildScriptDependencies = false
+    outputFormat = 'json'
+    outputName = 'gradle-sbom'
+    destination = file("$buildDir/sbom")
 }
-
