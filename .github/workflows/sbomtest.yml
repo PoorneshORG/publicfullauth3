@@ -19,71 +19,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Java (required for CycloneDX CLI)
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 17
-
-      # Download CycloneDX CLI jar
-      - name: Download CycloneDX CLI
+      # Install CycloneDX CLI (native binary)
+      - name: Install CycloneDX CLI
         run: |
           C_VERSION=0.29.1
-          curl -L -o cyclonedx-cli.jar \
-            https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${C_VERSION}/cyclonedx-cli-${C_VERSION}.jar
+          curl -L -o cyclonedx-cli \
+            https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${C_VERSION}/cyclonedx-cli-linux-x64
+          chmod +x cyclonedx-cli
+          sudo mv cyclonedx-cli /usr/local/bin/
 
-      # Java / Maven
-      - name: Generate SBOM - Java Maven
-        if: hashFiles('pom.xml') != ''
-        run: |
-          mvn -B clean install -DskipTests
-          java -jar cyclonedx-cli.jar sbom -o sbom.json --maven-target target/*.jar
-
-      # Gradle / Kotlin
+      # Generate SBOMs for each ecosystem if detected
       - name: Generate SBOM - Gradle
         if: hashFiles('build.gradle*') != ''
-        run: |
-          ./gradlew build -x test
-          java -jar cyclonedx-cli.jar gradle \
-            --project-group my-org \
-            --project-name my-gradle-app \
-            --project-version "${PROJECT_VERSION}" \
-            --output-file sbom.json
+        run: cyclonedx-cli gradle --output-file sbom-gradle.json
 
-      # Node.js / React
+      - name: Generate SBOM - Maven
+        if: hashFiles('pom.xml') != ''
+        run: cyclonedx-cli maven --output-file sbom-maven.json
+
       - name: Generate SBOM - Node.js
-        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
-        run: |
-          if [ -f package-lock.json ]; then
-            java -jar cyclonedx-cli.jar npm --output-file sbom.json
-          elif [ -f yarn.lock ]; then
-            java -jar cyclonedx-cli.jar yarn --output-file sbom.json
-          fi
+        if: hashFiles('package.json') != ''
+        run: cyclonedx-cli nodejs --output-file sbom-node.json
 
-      # Python
       - name: Generate SBOM - Python
         if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
-        run: |
-          if [ -f requirements.txt ]; then
-            java -jar cyclonedx-cli.jar python -r requirements.txt --output-file sbom.json
-          elif [ -f poetry.lock ]; then
-            java -jar cyclonedx-cli.jar python -p poetry.lock --output-file sbom.json
-          elif [ -f Pipfile.lock ]; then
-            java -jar cyclonedx-cli.jar python -p Pipfile.lock --output-file sbom.json
-          fi
+        run: cyclonedx-cli python --output-file sbom-python.json
 
-      # Flutter
       - name: Generate SBOM - Flutter
         if: hashFiles('pubspec.lock') != ''
+        run: cyclonedx-cli flutter --output-file sbom-flutter.json
+
+      # Merge all SBOMs into one file
+      - name: Merge SBOMs
         run: |
-          java -jar cyclonedx-cli.jar flutter --output-file sbom.json
+          FILES=$(ls sbom-*.json 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "No SBOMs were generated."
+            exit 1
+          fi
+          if [ $(echo $FILES | wc -w) -eq 1 ]; then
+            cp $FILES sbom.json
+          else
+            cyclonedx-cli merge --input-files $FILES --output-file sbom.json
+          fi
 
       # Debug SBOM
       - name: Debug SBOM contents
         run: |
           echo "===== SBOM JSON Preview ====="
-          cat sbom.json | jq '.components[] | {name, version, purl}'
+          cat sbom.json | jq '.components[] | {name, version, purl}' | head -n 20
 
       # Create project in Dependency-Track if missing
       - name: Get or Create Project
