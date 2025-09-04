@@ -33,10 +33,9 @@ jobs:
       - name: Generate SBOM with Vet
         run: |
           echo "Running Vet to produce SBOM..."
-          $GITHUB_WORKSPACE/../*/vet scan \
+          vet scan \
             --no-banner \
-            --report-cdx sbom.json \
-            --filter-suite $GITHUB_ACTION_PATH/dist/policy.yml
+            --report-cdx sbom.json
           ls -lh sbom.json
 
       # Debug SBOM preview
