@@ -19,33 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install fixed Syft version
+      # Install Syft
       - name: Install Syft
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
           | sh -s -- -b /usr/local/bin v1.29.0
 
-      # Java / Spring (Maven)
-      - name: Generate SBOM - Java Maven
-        if: hashFiles('pom.xml') != ''
-        run: syft pom.xml -o cyclonedx-json > sbom-maven.json
-
-      # Gradle / Kotlin
-      - name: Generate SBOM - Gradle
-        if: hashFiles('build.gradle*') != ''
-        run: syft build.gradle* -o cyclonedx-json > sbom-gradle.json
-
-      # Node.js / React
-      - name: Generate SBOM - Node.js
-        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
-        run: |
-          if [ -f package-lock.json ]; then
-            syft package-lock.json -o cyclonedx-json > sbom-node.json
-          elif [ -f yarn.lock ]; then
-            syft yarn.lock -o cyclonedx-json > sbom-node.json
-          fi
-
+      #####################
       # Python
+      #####################
       - name: Generate SBOM - Python
         if: hashFiles('requirements.txt') != '' || hashFiles('poetry.lock') != '' || hashFiles('Pipfile.lock') != ''
         run: |
@@ -57,12 +39,55 @@ jobs:
             syft Pipfile.lock -o cyclonedx-json > sbom-python.json
           fi
 
+      #####################
+      # Node.js
+      #####################
+      - name: Generate SBOM - Node.js
+        if: hashFiles('package-lock.json') != '' || hashFiles('yarn.lock') != ''
+        run: |
+          if [ -f package-lock.json ]; then
+            syft package-lock.json -o cyclonedx-json > sbom-node.json
+          elif [ -f yarn.lock ]; then
+            syft yarn.lock -o cyclonedx-json > sbom-node.json
+          fi
+
+      #####################
+      # Maven / Java
+      #####################
+      - name: Generate SBOM - Java Maven
+        if: hashFiles('pom.xml') != ''
+        run: |
+          mvn -B clean install -DskipTests dependency:copy-dependencies -DoutputDirectory=deps
+          # Scan all JARs in target + resolved dependencies
+          syft target/*.jar deps/*.jar -o cyclonedx-json > sbom-maven.json
+
+      #####################
+      # Gradle / Kotlin
+      #####################
+      - name: Generate SBOM - Gradle
+        if: hashFiles('build.gradle*') != ''
+        run: |
+          # Generate a lockfile to resolve all dependencies
+          ( [ -f ./gradlew ] && ./gradlew dependencies --write-locks || gradle dependencies --write-locks )
+          # Scan the lockfile for proper versions
+          if [ -f gradle.lockfile ]; then
+            syft gradle.lockfile -o cyclonedx-json > sbom-gradle.json
+          else
+            # fallback: scan built jars
+            ( [ -f ./gradlew ] && ./gradlew build -x test || gradle build -x test )
+            syft build/libs/*.jar -o cyclonedx-json > sbom-gradle.json
+          fi
+
+      #####################
       # Flutter
+      #####################
       - name: Generate SBOM - Flutter
         if: hashFiles('pubspec.lock') != ''
         run: syft pubspec.lock -o cyclonedx-json > sbom-flutter.json
 
+      #####################
       # Merge SBOMs
+      #####################
       - name: Merge SBOMs
         run: |
           FILES=$(ls sbom-*.json 2>/dev/null || true)
@@ -81,7 +106,6 @@ jobs:
                 components: (map(.components) | add)
               }
             ' $FILES > sbom.json
-          fi
 
       # Debug SBOM.json
       - name: Debug SBOM contents
@@ -96,7 +120,9 @@ jobs:
           name: sbom-${{ github.sha }}
           path: sbom.json
 
-      # Create project in Dependency-Track if missing
+      #####################
+      # Dependency-Track
+      #####################
       - name: Get or Create Project
         id: project
         run: |
@@ -113,7 +139,6 @@ jobs:
 
           echo "uuid=$UUID" >> $GITHUB_OUTPUT
 
-      # Upload SBOM to Dependency-Track
       - name: Upload SBOM to Dependency-Track
         run: |
           curl -s -X POST "$DT_URL/api/v1/bom" \
